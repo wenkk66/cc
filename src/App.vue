@@ -94,17 +94,6 @@
             <span>{{ isDownloadingApk ? downloadProgressText : 'APK' }}</span>
           </a>
 
-          <!-- 5. 游戏规则按钮 -->
-          <button
-            type="button"
-            @click="showGameRulesModal = true"
-            class="h-9 sm:h-9.5 px-3 sm:px-3.5 rounded-xl bg-gradient-to-r from-amber-700 via-amber-600 to-amber-700 hover:from-amber-600 hover:to-amber-500 text-amber-100 font-serif font-bold text-xs flex items-center gap-1 shadow-sm border border-amber-400/50 transition-all active:scale-95 cursor-pointer whitespace-nowrap"
-            title="查看玩法规则与计分细则"
-          >
-            <span class="text-xs">📜</span>
-            <span>规则</span>
-          </button>
-
           <!-- 6. 实时网络网速状态图标 -->
           <div
             class="h-9 sm:h-9.5 px-2.5 sm:px-3 rounded-xl border text-xs font-mono font-bold flex items-center gap-1 shadow-sm whitespace-nowrap select-none"
@@ -170,14 +159,27 @@
 
           <!-- 卡片内容 -->
           <div class="relative z-10 flex flex-col justify-between h-full space-y-1.5">
-            <!-- 顶部：游戏名称与游戏说明 -->
-            <div class="min-w-0">
-              <h3 class="text-lg sm:text-xl md:text-2xl font-black text-[#3C2C1E] font-serif-title tracking-tight group-hover:text-[#2A1E14] transition-colors truncate">
-                {{ g.name }}
-              </h3>
-              <p class="text-[10px] sm:text-[11px] text-[#6B5744] mt-0.5 truncate leading-tight">
-                {{ g.tagline }}
-              </p>
+            <!-- 顶部：游戏名称与说明，及右上角专属规则按钮 -->
+            <div class="min-w-0 flex items-start justify-between gap-1">
+              <div class="min-w-0 flex-1">
+                <h3 class="text-lg sm:text-xl md:text-2xl font-black text-[#3C2C1E] font-serif-title tracking-tight group-hover:text-[#2A1E14] transition-colors truncate">
+                  {{ g.name }}
+                </h3>
+                <p class="text-[10px] sm:text-[11px] text-[#6B5744] mt-0.5 truncate leading-tight">
+                  {{ g.tagline }}
+                </p>
+              </div>
+
+              <!-- 三大游戏板块右上角规则按钮 -->
+              <button
+                type="button"
+                @click.stop="openGameRules(g.id)"
+                class="px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg bg-gradient-to-r from-amber-700 via-amber-600 to-amber-700 hover:from-amber-600 hover:to-amber-500 text-amber-100 font-serif font-bold text-[10px] sm:text-xs shadow-xs border border-amber-400/60 transition-all active:scale-90 cursor-pointer shrink-0 flex items-center gap-0.5 z-20"
+                :title="`查看【${g.name}】玩法规则与计分细则`"
+              >
+                <span>📜</span>
+                <span>规则</span>
+              </button>
             </div>
 
             <!-- 中部：SVG图片展示区 (烟三固定显示，十三张扇形显示同花顺) -->
@@ -888,70 +890,57 @@
       @open-points="handleOpenPointsFromModal"
     />
 
-    <!-- 10. 大厅全游戏玩法规则与输赢计分规则模态框 -->
+    <!-- 10. 大厅全游戏玩法规则与输赢计分规则模态框 (默认旋转 90 度展示) -->
     <Teleport to="body">
       <div
         v-if="showGameRulesModal"
-        class="fixed inset-0 z-[120] bg-black/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 select-none"
+        class="fixed inset-0 z-[120] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 select-none overflow-hidden"
       >
-        <div class="w-[96vw] max-w-3xl max-h-[90vh] rounded-3xl bg-[#FAF4E8] border-2 border-amber-600/60 p-4 sm:p-6 shadow-2xl flex flex-col text-[#3C2C1E] overflow-hidden">
+        <div
+          class="w-[88vh] max-w-[660px] h-[92vw] max-h-[500px] rounded-3xl bg-[#FAF4E8] border-2 border-amber-600/60 p-3.5 sm:p-5 shadow-2xl flex flex-col text-[#3C2C1E] overflow-hidden transition-transform duration-300"
+          :class="isRulesModalRotated ? 'transform rotate-90' : ''"
+        >
           <!-- Header -->
-          <div class="flex items-center justify-between pb-3 border-b border-[#D8C7B0] shrink-0">
-            <div class="flex items-center gap-2.5">
-              <span class="text-2xl p-2 rounded-2xl bg-amber-600/20 text-amber-900 border border-amber-600/40">📜</span>
+          <div class="flex items-center justify-between pb-2.5 border-b border-[#D8C7B0] shrink-0">
+            <div class="flex items-center gap-2">
+              <span class="text-xl sm:text-2xl p-1.5 rounded-2xl bg-amber-600/20 text-amber-900 border border-amber-600/40">
+                {{ activeRulesTab === 'yansan' ? '🎴' : activeRulesTab === 'mahjong' ? '🀄' : '🃏' }}
+              </span>
               <div>
-                <h3 class="text-base sm:text-xl font-black text-[#3C2C1E] font-serif-title flex items-center gap-2">
-                  <span>国粹棋牌 · 游戏规则与计分细则</span>
+                <h3 class="text-sm sm:text-lg font-black text-[#3C2C1E] font-serif-title flex items-center gap-2">
+                  <span v-if="activeRulesTab === 'yansan'">🎴 经典烟三 · 玩法与输赢计分规则</span>
+                  <span v-else-if="activeRulesTab === 'mahjong'">🀄 麻将 (红中/普通) · 玩法与输赢计分规则</span>
+                  <span v-else>🃏 十三张 (十三水) · 玩法与输赢计分规则</span>
                 </h3>
-                <p class="text-xs text-[#6B5744] mt-0.5">
-                  官方正统玩法与权威比牌计分标准规则全览
+                <p class="text-[10px] sm:text-xs text-[#6B5744] mt-0.5">
+                  <span v-if="activeRulesTab === 'yansan'">经典方块4首发 · 黑桃3/黑桃A双煞同盟与计分规则全览</span>
+                  <span v-else-if="activeRulesTab === 'mahjong'">红中麻将自摸、刮风下雨杠牌、抓码与大满贯规则全览</span>
+                  <span v-else'">十三水全垒打、打枪、特殊牌型免比与道数比牌规则全览</span>
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              @click="showGameRulesModal = false"
-              class="w-8 h-8 rounded-full bg-[#EFE5D3] hover:bg-[#E5D7C2] border border-[#D8C7B0] flex items-center justify-center text-sm font-bold text-[#3C2C1E] transition-all active:scale-95 cursor-pointer shadow-xs"
-            >
-              ✕
-            </button>
+            <div class="flex items-center gap-1.5">
+              <button
+                type="button"
+                @click="isRulesModalRotated = !isRulesModalRotated"
+                class="px-2 py-1 rounded-xl bg-[#EFE5D3] hover:bg-[#E5D7C2] border border-[#D8C7B0] text-[10px] sm:text-xs font-bold text-[#3C2C1E] flex items-center gap-1 transition-all active:scale-95 cursor-pointer shadow-xs"
+                title="切换旋转状态"
+              >
+                <span>🔄</span>
+                <span>{{ isRulesModalRotated ? '正向' : '旋转90°' }}</span>
+              </button>
+              <button
+                type="button"
+                @click="showGameRulesModal = false"
+                class="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#EFE5D3] hover:bg-[#E5D7C2] border border-[#D8C7B0] flex items-center justify-center text-xs sm:text-sm font-bold text-[#3C2C1E] transition-all active:scale-95 cursor-pointer shadow-xs"
+              >
+                ✕
+              </button>
+            </div>
           </div>
 
-          <!-- Game Tabs Navigator -->
-          <div class="flex items-center gap-2 my-3 p-1.5 bg-[#EFE5D3] rounded-2xl border border-[#D8C7B0] shrink-0">
-            <button
-              type="button"
-              @click="activeRulesTab = 'shisanshui'"
-              :class="activeRulesTab === 'shisanshui' ? 'bg-gradient-to-r from-amber-700 to-amber-600 text-white font-black shadow-md border border-amber-400/50' : 'text-[#6B5744] hover:text-[#3C2C1E] font-bold'"
-              class="flex-1 py-2 rounded-xl text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <span>🃏</span>
-              <span>十三张规则与计分</span>
-            </button>
-
-            <button
-              type="button"
-              @click="activeRulesTab = 'yansan'"
-              :class="activeRulesTab === 'yansan' ? 'bg-gradient-to-r from-amber-700 to-amber-600 text-white font-black shadow-md border border-amber-400/50' : 'text-[#6B5744] hover:text-[#3C2C1E] font-bold'"
-              class="flex-1 py-2 rounded-xl text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <span>🎴</span>
-              <span>经典烟三规则与计分</span>
-            </button>
-
-            <button
-              type="button"
-              @click="activeRulesTab = 'mahjong'"
-              :class="activeRulesTab === 'mahjong' ? 'bg-gradient-to-r from-amber-700 to-amber-600 text-white font-black shadow-md border border-amber-400/50' : 'text-[#6B5744] hover:text-[#3C2C1E] font-bold'"
-              class="flex-1 py-2 rounded-xl text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <span>🀄</span>
-              <span>麻将规则与计分</span>
-            </button>
-          </div>
-
-          <!-- Rules Content Scroll Area -->
-          <div class="flex-1 min-h-0 overflow-y-auto pr-1 space-y-4 text-xs sm:text-sm leading-relaxed text-[#3C2C1E]">
+          <!-- Rules Content Scroll Area (No Tab Switcher Bar - Strictly Separate Game Rules) -->
+          <div class="flex-1 min-h-0 overflow-y-auto pr-1 space-y-4 text-xs sm:text-sm leading-relaxed text-[#3C2C1E] mt-3">
             <!-- 1. 十三张 (十三水) 规则 -->
             <div v-if="activeRulesTab === 'shisanshui'" class="space-y-3">
               <!-- 基本流程 -->
@@ -988,7 +977,7 @@
               <!-- 道数直接计分表 -->
               <div class="p-3.5 rounded-2xl bg-white/80 border border-[#D8C7B0] shadow-xs space-y-2">
                 <h4 class="font-black text-amber-900 font-serif-title flex items-center gap-1.5 text-sm sm:text-base border-b border-amber-200 pb-1">
-                  <span>📊 三道胜出直接计分规则（1水 = 1分，直接计分）</span>
+                  <span>📊 三道胜出直接计分规则（1水 = 1分）</span>
                 </h4>
                 <div class="overflow-x-auto">
                   <table class="w-full text-left border-collapse font-sans text-xs">
@@ -1058,28 +1047,39 @@
                 <p>• <b>特殊牌型免比通关</b>：至尊青龙（+36水）、一条龙（+26水）、十二皇族（+24水）、三同花顺（+20水）、三铁支（+16水）、凑一色/全大全小（+10水）、六对半/三同花/三顺子（+6水）。</p>
                 <p>• <b>打枪（2x）</b>：若玩家头中尾三道全胜某一对手，触发“打枪”，基础三道得分<b>翻倍 (2x)</b>。</p>
                 <p>• <b>全垒打（2x）</b>：若玩家打枪全场所有对手，触发“全垒打”，总得分<b>再翻倍 (2x)</b>！</p>
-                <p>• <b>预约场 06:00 延时</b>：每日 06:00 准时统一结算；若此时正处于理牌中，系统自动弹幕提醒并延时 1 分钟，逾期由智能 AI 自动最优理牌并封盘结算。</p>
               </div>
             </div>
 
-            <!-- 2. 烟三 (三打一) 规则 -->
+            <!-- 2. 烟三 (三打一 / 双煞) 规则 -->
             <div v-else-if="activeRulesTab === 'yansan'" class="space-y-3">
               <div class="p-3.5 rounded-2xl bg-white/80 border border-[#D8C7B0] shadow-xs space-y-2">
                 <h4 class="font-black text-amber-900 font-serif-title flex items-center gap-1.5 text-sm sm:text-base border-b border-amber-200 pb-1">
-                  <span>🎴 经典烟三 (三打一) 玩法与规则</span>
+                  <span>🎴 经典烟三 (方块4首发 / 煞牌阵营) 玩法规则</span>
                 </h4>
-                <p>• <b>游戏简介</b>：地方经典扑克竞技对局，4 名玩家参与（1 名领头地主 vs 3 名闲家农民）。</p>
-                <p>• <b>定庄叫分</b>：玩家轮流选择叫分（如 5分/10分、10分/20分、20分/40分场），最高叫分者成为地主，并拿取底牌。</p>
-                <p>• <b>出牌规则</b>：支持单张、对子、三条、顺子、连对、炸弹（四条及以上）。地主与闲家轮流跟牌或过牌。</p>
-                <p>• <b>高级 AI 人机智能</b>：人机掌握战术控制，合理选择性保留关键控场牌（2/A/♠3），避免无谓消耗小牌，追求高胜率定局。</p>
+                <p>• <b>发牌与首发</b>：4名玩家各发 13 张牌。拿到<b>方块 4 (♦4)</b> 的玩家拥有首发权，出牌组合必须包含 ♦4。</p>
+                <p>• <b>煞牌同盟机制</b>：</p>
+                <div class="pl-2 space-y-1 text-xs">
+                  <p>🔹 <b>双人同盟 (2v2)</b>：抓到 <b>黑桃 3 (♠3)</b> 与 <b>黑桃 A (♠A)</b> 的两名玩家自动结为同盟，另外两名玩家结为另一同盟。</p>
+                  <p>🔹 <b>独煞单挑 (1v3)</b>：若同一个玩家<b>同时抓到 ♠3 与 ♠A</b>，则该玩家单独为一方（双煞独挑），独战其余 3 名玩家！</p>
+                  <p>🔹 <b>强攻单挑 (1v3)</b>：若玩家手牌极其强劲，可在首轮选择“强攻”，放弃同盟直接一人独战其余 3 家。</p>
+                </div>
+                <p>• <b>牌型与压牌</b>：支持单张、对子、三条、顺子、连对、炸弹（四条及以上）。后家必须用同张数且更大的牌型压制，无牌可压或放弃则选择“过”。</p>
               </div>
 
               <div class="p-3.5 rounded-2xl bg-white/80 border border-[#D8C7B0] shadow-xs space-y-2">
                 <h4 class="font-black text-amber-900 font-serif-title flex items-center gap-1.5 text-sm sm:text-base border-b border-amber-200 pb-1">
-                  <span>🪙 烟三输赢计分规则</span>
+                  <span>🪙 烟三输赢计分规则 (试玩与在线场统一)</span>
                 </h4>
-                <p>• <b>地主获胜</b>：若地主抓分达到或超过叫牌预设线，地主获胜，从 3 名闲家处各收取对应的设定积分。</p>
-                <p>• <b>农民获胜</b>：若地主未达到预设分，农民方获胜，地主向 3 名农民分别支付设定积分。</p>
+                <p>• <b>独煞/强攻 1v3 计分规则</b>：</p>
+                <div class="pl-2 space-y-1 text-xs">
+                  <p>🏆 <b>独煞获胜（第 1 名出完手牌）</b>：独煞玩家向其余 3 名玩家<b>各收取 10 积分</b>（独煞玩家 <b>+30 分</b>，其余 3 人各 <b>-10 分</b>）。</p>
+                  <p>❌ <b>独煞失败（未获得第 1 名）</b>：独煞玩家向其余 3 名玩家<b>各支付 10 积分</b>（独煞玩家 <b>-30 分</b>，其余 3 人各 <b>+10 分</b>）。</p>
+                </div>
+                <p>• <b>双人同盟 2v2 计分规则</b>：</p>
+                <div class="pl-2 space-y-1 text-xs">
+                  <p>🥇 <b>双胜（包揽第 1 与第 2 名出完）</b>：胜利同盟两人各 <b>+20 分</b>，失败同盟两人各 <b>-20 分</b>。</p>
+                  <p>⚖️ <b>单胜 / 平局</b>：同盟仅一人获得第 1 名，若同盟另一人获得第 3 名则同盟各 <b>+10 分</b>，若得第 4 名则判定为平局 (各 <b>0 分</b>)。</p>
+                </div>
               </div>
             </div>
 
@@ -1087,7 +1087,7 @@
             <div v-else class="space-y-3">
               <div class="p-3.5 rounded-2xl bg-white/80 border border-[#D8C7B0] shadow-xs space-y-2">
                 <h4 class="font-black text-amber-900 font-serif-title flex items-center gap-1.5 text-sm sm:text-base border-b border-amber-200 pb-1">
-                  <span>🀄 麻将玩法与规则说明</span>
+                  <span>🀄 麻将 (红中/普通) 玩法与规则说明</span>
                 </h4>
                 <p>• <b>人数与牌数</b>：4 人麻将竞技对局，共 108 张牌（筒、条、万），红中场加入红中百搭鬼牌。分为 6 码场与 10 码场。</p>
                 <p>• <b>基本流程</b>：打色子定庄开门，四道抓牌（手牌 13 张，庄家 14 张）。依次摸牌、打牌，支持碰牌、杠牌（暗杠/明杠/补杠）与自摸胡牌（仅支持自摸和牌）。</p>
@@ -1098,7 +1098,7 @@
 
               <div class="p-3.5 rounded-2xl bg-white/80 border border-[#D8C7B0] shadow-xs space-y-2">
                 <h4 class="font-black text-amber-900 font-serif-title flex items-center gap-1.5 text-sm sm:text-base border-b border-amber-200 pb-1">
-                  <span>🪙 麻将输赢计分规则（无复杂番型，简单直接）</span>
+                  <span>🪙 麻将输赢计分规则</span>
                 </h4>
                 <p>• <b>结算公式</b>：输赢得分 = <b>底分 (10分) + 命中码数 × 10分 + 杠牌得分</b>。</p>
                 <p>• <b>简单计分</b>：无复杂的番数与番型计算，只要自摸胡牌即拿底分，中码越多得分越高，直观清晰！</p>
@@ -1781,7 +1781,17 @@ const showMahjongSceneModal = ref(false);
 const showTermuxModal = ref(false);
 const showServerConfigModal = ref(false);
 const showGameRulesModal = ref(false);
+const isRulesModalRotated = ref(true); // 点击规则的弹窗默认旋转90度
 const activeRulesTab = ref<'shisanshui' | 'yansan' | 'mahjong'>('shisanshui');
+
+function openGameRules(gameId: string) {
+  if (gameId === 'yansan' || gameId === 'shisanshui' || gameId === 'mahjong') {
+    activeRulesTab.value = gameId;
+  }
+  isRulesModalRotated.value = true;
+  showGameRulesModal.value = true;
+  if (typeof soundFX.playTap === 'function') soundFX.playTap();
+}
 
 const isDownloadingApk = ref(false);
 const downloadProgressText = ref('准备下载...');
