@@ -132,6 +132,7 @@ class SoundEffects {
   public voiceVolume = 0.9; // 0.0 - 1.0 (出牌真人配音与牌桌音效音量)
   public bgmVolume = 0.7;   // 0.0 - 1.0 (背景古筝与茶楼环境音乐音量)
   private isUnlocked = false;
+  private lastZimoSpokenTime = 0;
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -846,9 +847,14 @@ class SoundEffects {
       textToSpeak = formatChinesePokerSpeech(action);
     }
 
-    // 严禁在自摸语音前额外增加“清一色”等修饰词，保证纯正地道自摸播报
+    // 严禁在自摸语音前额外增加“清一色”等修饰词，保证纯正地道自摸播报；同时严格实行3.5秒防抖，杜绝重复播放自摸语音
     if (textToSpeak && (action === 'zimo' || textToSpeak.includes('自摸'))) {
       textToSpeak = textToSpeak.replace(/^清一色[，,\s]*/, '').replace(/清一色自摸/, '自摸');
+      const now = Date.now();
+      if (now - this.lastZimoSpokenTime < 3500) {
+        return;
+      }
+      this.lastZimoSpokenTime = now;
     }
 
     const isFemale = options?.isFemale ?? Math.random() > 0.5;

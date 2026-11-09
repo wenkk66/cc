@@ -3447,6 +3447,9 @@ function createRoomSubmit() {
   currentView.value = 'arena';
 }
 
+let lastSettledMatchKey = '';
+let lastSettledMatchTime = 0;
+
 function onGameMove(payload: any) {
   const currentRoomIdVal = activeRoomId.value || activeRoom.value?.id;
 
@@ -3482,6 +3485,15 @@ function onGameMove(payload: any) {
 
   // Handle outcome
   if (payload && payload.winner !== undefined && payload.winner !== null) {
+    const roundKey = `${activeGameType.value}_${currentRoomIdVal || 'local'}_${payload.winner}_${payload.rewardCoins ?? ''}_${payload.payoutPerOpponent ?? ''}`;
+    const now = Date.now();
+    if (lastSettledMatchKey === roundKey && now - lastSettledMatchTime < 3500) {
+      console.warn('🛡️ [全局对局结算防重] 3.5秒内已处理过本局结算，防止重复结算与多次扣减积分');
+      return;
+    }
+    lastSettledMatchKey = roundKey;
+    lastSettledMatchTime = now;
+
     const { isWin, isTie, scorePoints, coinsDelta, ratingDelta, detailText, replayData } =
       calculateGameSettlement(activeGameType.value, payload);
 

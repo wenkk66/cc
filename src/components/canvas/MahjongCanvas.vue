@@ -731,6 +731,7 @@ const hasWon = ref(false);
 const showSettlement = ref(false);
 const announcingWinnerSeat = ref<number | null>(null);
 let announceTimer: any = null;
+let botActionTimers: any[] = [];
 const tipMessage = ref('手牌理顺就绪，轮到您出牌');
 
 // Opponents Hands (East: 0, North: 1, West: 2)
@@ -937,6 +938,24 @@ function stopClaimCountdown() {
   }
 }
 
+function cleanAllGameTimers() {
+  stopTurnCountdown();
+  stopClaimCountdown();
+  resetAutoHostState();
+  cleanDealingTimers();
+  if (botTimer) {
+    clearTimeout(botTimer);
+    botTimer = null;
+  }
+  if (announceTimer) {
+    clearTimeout(announceTimer);
+    announceTimer = null;
+  }
+  botActionTimers.forEach((t) => clearTimeout(t));
+  botActionTimers = [];
+  pendingClaimNext = null;
+}
+
 function handlePassClaim() {
   soundFX.playTap();
   sendGameMove('pass', { absSeat: mySeat.value });
@@ -1016,49 +1035,62 @@ function shouldSmartPeng(hand: MahjongTile[], tile: MahjongTile): boolean {
 
 function waitForPlayerClaim(next: () => void) {
   stopClaimCountdown();
+  if (hasWon.value || showSettlement.value || isDrawStalemate.value || dealingPhase.value !== 'playing') return;
 
   // 托管状态下的智能截击判定（托管自动明杠或智能碰牌）
-  if (isAutoHost.value && !hasWon.value && !isDrawStalemate.value) {
+  if (isAutoHost.value && !hasWon.value && !isDrawStalemate.value && dealingPhase.value === 'playing') {
     if (canGang.value) {
-      botTimer = setTimeout(() => {
+      const t = setTimeout(() => {
+        if (hasWon.value || showSettlement.value || dealingPhase.value !== 'playing') return;
         handleGang();
       }, 500);
+      botActionTimers.push(t);
       return;
     }
     if (canPeng.value) {
       const d = lastDiscarded.value;
       if (d && shouldSmartPeng(myHand.value, d)) {
-        botTimer = setTimeout(() => {
+        const t = setTimeout(() => {
+          if (hasWon.value || showSettlement.value || dealingPhase.value !== 'playing') return;
           handlePeng();
         }, 500);
+        botActionTimers.push(t);
         return;
       }
     }
-    botTimer = setTimeout(() => {
+    const t = setTimeout(() => {
+      if (hasWon.value || showSettlement.value || dealingPhase.value !== 'playing') return;
       next();
     }, 550);
+    botActionTimers.push(t);
     return;
   }
 
   // 检查玩家是否有碰或杠的机会 (真人操作)
-  if ((canPeng.value || canGang.value) && !hasWon.value && !isDrawStalemate.value) {
+  if ((canPeng.value || canGang.value) && !hasWon.value && !isDrawStalemate.value && dealingPhase.value === 'playing') {
     isClaiming.value = true;
     claimCountdown.value = 10;
     pendingClaimNext = next;
 
     claimInterval = setInterval(() => {
+      if (hasWon.value || showSettlement.value || dealingPhase.value !== 'playing') {
+        stopClaimCountdown();
+        return;
+      }
       claimCountdown.value--;
       if (claimCountdown.value <= 0) {
         // 10秒超时自动过
         const cb = pendingClaimNext;
         stopClaimCountdown();
-        if (cb) cb();
+        if (cb && !hasWon.value && !showSettlement.value && dealingPhase.value === 'playing') cb();
       }
     }, 1000);
   } else {
-    botTimer = setTimeout(() => {
+    const t = setTimeout(() => {
+      if (hasWon.value || showSettlement.value || dealingPhase.value !== 'playing') return;
       next();
     }, 550);
+    botActionTimers.push(t);
   }
 }
 
@@ -1505,12 +1537,12 @@ function handleLeaveToLobby() {
 
 function onRestartGame() {
   soundFX.playTap();
-  resetAutoHostState();
+  cleanAllGameTimers();
+  hasWon.value = false;
+  showSettlement.value = false;
+  isDrawStalemate.value = false;
   if (props.isPracticeMode || isAllOtherPlayersBots.value) {
     hasClickedReady.value = false;
-    showSettlement.value = false;
-    hasWon.value = false;
-    isDrawStalemate.value = false;
     continueGame();
     emit('restart');
     return;
@@ -1746,9 +1778,8 @@ function dealNewMatch(designatedDealer?: number, forceReApply = false, dealOverr
     }
     lastAppliedDealId.value = dealIdentifier;
   }
-  stopTurnCountdown();
-  stopClaimCountdown();
-  cleanDealingTimers();
+  cleanAllGameTimers();
+  hasWon.value = false;
   isDrawStalemate.value = false;
   showSettlement.value = false;
 
@@ -1952,12 +1983,20 @@ function finishDealingAndStartPlay() {
   // 特殊规则：起手摸齐四张红中直接结束游戏！
   if (isHongzhongMode.value) {
     if (myHand.value.filter(isHongzhong).length === 4) {
-      setTimeout(() => triggerMahjongWin(0, true), 350);
+      const t = setTimeout(() => {
+        if (hasWon.value || showSettlement.value || dealingPhase.value === 'settled') return;
+        triggerMahjongWin(0, true);
+      }, 350);
+      dealingAnimTimers.push(t);
       return;
     }
     for (let b = 0; b < 3; b++) {
       if (oppHands.value[b].filter(isHongzhong).length === 4) {
-        setTimeout(() => triggerMahjongWin(b + 1, true), 350);
+        const t = setTimeout(() => {
+          if (hasWon.value || showSettlement.value || dealingPhase.value === 'settled') return;
+          triggerMahjongWin(b + 1, true);
+        }, 350);
+        dealingAnimTimers.push(t);
         return;
       }
     }
@@ -2005,12 +2044,20 @@ function skipDealingAnimation() {
   // Check 4 Hongzhong instant win
   if (isHongzhongMode.value) {
     if (myHand.value.filter(isHongzhong).length === 4) {
-      setTimeout(() => triggerMahjongWin(0, true), 350);
+      const t = setTimeout(() => {
+        if (hasWon.value || showSettlement.value || dealingPhase.value === 'settled') return;
+        triggerMahjongWin(0, true);
+      }, 350);
+      dealingAnimTimers.push(t);
       return;
     }
     for (let b = 0; b < 3; b++) {
       if (oppHands.value[b].filter(isHongzhong).length === 4) {
-        setTimeout(() => triggerMahjongWin(b + 1, true), 350);
+        const t = setTimeout(() => {
+          if (hasWon.value || showSettlement.value || dealingPhase.value === 'settled') return;
+          triggerMahjongWin(b + 1, true);
+        }, 350);
+        dealingAnimTimers.push(t);
         return;
       }
     }
@@ -2046,6 +2093,7 @@ function skipDealingAnimation() {
 
 // 规则：可以碰 (他人出牌时，手牌中有2张相同牌；红中不可碰)
 const canPeng = computed(() => {
+  if (hasWon.value || showSettlement.value || dealingPhase.value !== 'playing') return false;
   if (!lastDiscarded.value || turnPlayer.value === 0) return false;
   const d = lastDiscarded.value;
   // 红中模式下，红中为万能百搭，不可被碰
@@ -2055,6 +2103,7 @@ const canPeng = computed(() => {
 
 // 规则：可以杠 (支持明杠、暗杠、补杠；红中模式下四红中直接胡牌结算)
 const canGang = computed(() => {
+  if (hasWon.value || showSettlement.value || dealingPhase.value !== 'playing') return false;
   // 1. 明杠：他人出牌时，手中已有3张相同牌
   if (lastDiscarded.value && turnPlayer.value !== 0) {
     const d = lastDiscarded.value;
@@ -2353,6 +2402,7 @@ function checkHongzhongWin(hand: MahjongTile[]): boolean {
 
 // 规则：不可炮胡，仅限自摸 (必须轮到自己回合且已抓牌在手，手牌数为 3k+2)
 const canHu = computed(() => {
+  if (hasWon.value || showSettlement.value || dealingPhase.value !== 'playing') return false;
   if (turnPlayer.value !== 0 || myHand.value.length % 3 !== 2) return false;
   if (isHongzhongMode.value) {
     return checkHongzhongWin(myHand.value);
@@ -2370,14 +2420,15 @@ const canHu = computed(() => {
  *   2. 自摸手牌没有红中：奖励额外加2个码 (六码场变8码，十码场变12码)
  */
 function triggerMahjongWin(winnerSeat: number, isFourHongzhong = false) {
-  stopTurnCountdown();
-  stopClaimCountdown();
-  resetAutoHostState();
-  if (botTimer) clearTimeout(botTimer);
-  if (announceTimer) clearTimeout(announceTimer);
+  if (hasWon.value || showSettlement.value || dealingPhase.value === 'settled') {
+    console.warn('🛡️ [麻将结算防重] 已在结算状态，忽略重复调用与重复扣分');
+    return;
+  }
+  cleanAllGameTimers();
 
   hasWon.value = true;
   showSettlement.value = true;
+  dealingPhase.value = 'settled';
   clearLocalSnapshot();
   const isPlayer = winnerSeat === 0;
   const seatNames = ['您 (本席)', '东席 (南洋商贾)', '北席 (九龙棋杰)', '西席 (濠江赌客)'];
@@ -3462,7 +3513,7 @@ function handleGang() {
 
 // 规则：仅自摸胡牌 (不可炮胡)，调用统一结算函数
 function handleHu() {
-  if (!canHu.value) return;
+  if (!canHu.value || hasWon.value || showSettlement.value || dealingPhase.value !== 'playing') return;
   const isFourHz = isHongzhongMode.value && myHand.value.filter(isHongzhong).length === 4;
   triggerMahjongWin(0, isFourHz);
 }
@@ -3477,7 +3528,7 @@ function passTurnToNext(fromRelSeat: number) {
   stopTurnCountdown();
   stopClaimCountdown();
   if (botTimer) clearTimeout(botTimer);
-  if (hasWon.value || isDrawStalemate.value) return;
+  if (hasWon.value || showSettlement.value || isDrawStalemate.value || dealingPhase.value !== 'playing') return;
 
   const nextRelSeat = (fromRelSeat + 1) % 4;
   const nextAbsSeat = relToAbsSeat(nextRelSeat);
@@ -3485,7 +3536,7 @@ function passTurnToNext(fromRelSeat: number) {
   if (nextRelSeat === 0) {
     // 轮到本家 (玩家) 回合
     waitForPlayerClaim(() => {
-      if (hasWon.value || isDrawStalemate.value) return;
+      if (hasWon.value || showSettlement.value || isDrawStalemate.value || dealingPhase.value !== 'playing') return;
       turnPlayer.value = 0;
       startTurnCountdown();
       handleDraw();
@@ -3493,7 +3544,7 @@ function passTurnToNext(fromRelSeat: number) {
   } else {
     // 轮到其它席位 (真实牌友或电脑 AI)
     waitForPlayerClaim(() => {
-      if (hasWon.value || isDrawStalemate.value) return;
+      if (hasWon.value || showSettlement.value || isDrawStalemate.value || dealingPhase.value !== 'playing') return;
       turnPlayer.value = nextRelSeat;
       startTurnCountdown();
       drawTable();
@@ -3501,11 +3552,13 @@ function passTurnToNext(fromRelSeat: number) {
 
       if (isSeatBot(nextAbsSeat)) {
         const thinkTime = Math.floor(400 + Math.random() * 400);
-        botTimer = setTimeout(() => {
+        const t = setTimeout(() => {
+          if (hasWon.value || showSettlement.value || isDrawStalemate.value || dealingPhase.value !== 'playing') return;
           botPlay(nextRelSeat, () => {
             passTurnToNext(nextRelSeat);
           });
         }, thinkTime);
+        botActionTimers.push(t);
       } else {
         // 🛡️ 真实连线牌友席位：等待真实玩家通过网络打牌，严禁本地代码替其代打！
         tipMessage.value = `轮到 【${SEAT_NAMES[nextRelSeat]}】 出牌...`;
@@ -3516,6 +3569,7 @@ function passTurnToNext(fromRelSeat: number) {
 }
 
 function botPlay(seat: number, next: () => void) {
+  if (hasWon.value || showSettlement.value || isDrawStalemate.value || dealingPhase.value !== 'playing') return;
   const botIdx = seat - 1; // 0=East, 1=North, 2=West
   const botHand = oppHands.value[botIdx] || [];
 
@@ -3556,7 +3610,8 @@ function botPlay(seat: number, next: () => void) {
         return;
       }
 
-      setTimeout(() => {
+      const t = setTimeout(() => {
+        if (hasWon.value || showSettlement.value || dealingPhase.value !== 'playing') return;
         const updatedHand = oppHands.value[botIdx];
         const bestDiscardIdx = findSmartBestDiscard(updatedHand);
         const [discarded] = updatedHand.splice(bestDiscardIdx, 1);
@@ -3571,6 +3626,7 @@ function botPlay(seat: number, next: () => void) {
         drawTable();
         next();
       }, 1100);
+      botActionTimers.push(t);
       return;
     }
 
@@ -3590,7 +3646,8 @@ function botPlay(seat: number, next: () => void) {
       tipMessage.value = `🀄 【${SEAT_NAMES[seat]}】大喊：碰！拿下了【${d.text}】`;
       drawTable();
 
-      setTimeout(() => {
+      const t = setTimeout(() => {
+        if (hasWon.value || showSettlement.value || dealingPhase.value !== 'playing') return;
         const updatedHand = oppHands.value[botIdx];
         const bestDiscardIdx = findSmartBestDiscard(updatedHand);
         const [discarded] = updatedHand.splice(bestDiscardIdx, 1);
@@ -3605,6 +3662,7 @@ function botPlay(seat: number, next: () => void) {
         drawTable();
         next();
       }, 1100);
+      botActionTimers.push(t);
       return;
     }
   }
@@ -3780,6 +3838,7 @@ function handleRemoteGameEvent(evtAbsSeat: number, evt: any) {
     drawTable();
     saveLocalSnapshot();
   } else if (evt.action === 'hu') {
+    if (hasWon.value || showSettlement.value || dealingPhase.value === 'settled') return;
     triggerMahjongWin(relSeat, Boolean(evt.isFourHz));
   } else if (evt.action === 'pass') {
     if (turnPlayer.value === relSeat) {
@@ -3885,11 +3944,7 @@ onBeforeUnmount(() => {
   }
   window.removeEventListener('resize', updateDimensions);
   resizeObserver?.disconnect();
-  cleanDealingTimers();
-  stopTurnCountdown();
-  stopClaimCountdown();
-  if (autoHostTimer) clearTimeout(autoHostTimer);
-  if (botTimer) clearTimeout(botTimer);
+  cleanAllGameTimers();
 });
 </script>
 
