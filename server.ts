@@ -1768,17 +1768,18 @@ setInterval(() => {
           room.moveCount += 1;
           room.boardState.moveCount = room.moveCount;
           room.boardState.actionSeq = (room.boardState.actionSeq || 0) + 1;
-          const d4Combo = {
+          const isAbsoluteFirst = room.moveCount === 1;
+          const fallbackCombo = {
             type: 'single',
-            rank: 4,
+            rank: isAbsoluteFirst ? 4 : 5,
             suitVal: 1,
-            cards: [{ id: 'd-4', rank: 4, suitVal: 1, label: '4', suit: '♦', isRed: true }],
-            label: '单张 ♦4',
-            primaryRank: 4,
+            cards: [{ id: isAbsoluteFirst ? 'd-4' : 'c-5', rank: isAbsoluteFirst ? 4 : 5, suitVal: 1, label: isAbsoluteFirst ? '4' : '5', suit: isAbsoluteFirst ? '♦' : '♣', isRed: isAbsoluteFirst }],
+            label: isAbsoluteFirst ? '单张 ♦4' : '托管领出单牌',
+            primaryRank: isAbsoluteFirst ? 4 : 5,
             primarySuitVal: 1,
             seat: currentSeat,
           };
-          room.boardState.lastCombo = d4Combo;
+          room.boardState.lastCombo = fallbackCombo;
           if (room.boardState.handsCount && room.boardState.handsCount[currentSeat] > 0) {
             room.boardState.handsCount[currentSeat] = Math.max(0, room.boardState.handsCount[currentSeat] - 1);
           }
@@ -1790,19 +1791,19 @@ setInterval(() => {
               action: 'play',
               seat: currentSeat,
               autoPlay: true,
-              combo: d4Combo,
+              combo: fallbackCombo,
               cardsCount: 1,
               nextTurn: nextSeat,
-              reason: 'timeout_first_move_diamond4',
+              reason: isAbsoluteFirst ? 'timeout_first_move_diamond4' : 'timeout_lead_single',
             },
             payload: {
               action: 'play',
               seat: currentSeat,
               autoPlay: true,
-              combo: d4Combo,
+              combo: fallbackCombo,
               cardsCount: 1,
               nextTurn: nextSeat,
-              reason: 'timeout_first_move_diamond4',
+              reason: isAbsoluteFirst ? 'timeout_first_move_diamond4' : 'timeout_lead_single',
             },
             moveCount: room.moveCount,
             boardState: room.boardState,
