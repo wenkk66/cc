@@ -289,16 +289,14 @@
         class="absolute bottom-3 left-[max(184px,calc(25%+14px))] right-2 sm:right-4 z-20 flex items-center justify-end md:justify-center pointer-events-auto select-none"
       >
         <div class="flex items-center gap-1.5 sm:gap-2 md:gap-2.5 p-1 sm:p-1.5 rounded-2xl bg-black/45 backdrop-blur-md border border-amber-500/35 shadow-[0_8px_32px_rgba(0,0,0,0.5)] max-w-full overflow-x-auto no-scrollbar">
-          <!-- 1. 回合倒计时指示器 (长驻显示，轮到本家时高亮倒计时，其余时间灰色) -->
+          <!-- 1. 回合倒计时指示器 (长驻高亮显示红字倒计时，轮到任意玩家出牌均重置倒计时) -->
           <div
-            class="min-w-[62px] sm:min-w-[76px] h-9 sm:h-10 px-2 sm:px-2.5 rounded-xl border text-xs sm:text-sm font-mono font-bold flex items-center justify-center gap-1 shrink-0 shadow-md transition-all"
-            :class="(turnSeat === mySeat && !isAutoHost)
-              ? (turnCountdown <= 10 ? 'text-red-400 bg-red-950/80 border-red-500/80 animate-pulse ring-1 ring-red-400' : 'text-amber-300 bg-amber-950/60 border-amber-500/60 shadow-[0_0_12px_rgba(245,158,11,0.25)]')
-              : 'text-stone-500 border-stone-800/50 opacity-55 bg-stone-900/40'"
-            title="本手思考时间上限60秒"
+            class="min-w-[62px] sm:min-w-[76px] h-9 sm:h-10 px-2 sm:px-2.5 rounded-xl border text-xs sm:text-sm font-mono font-bold flex items-center justify-center gap-1 shrink-0 shadow-md transition-all bg-red-950/90 border-red-500/80 text-red-400 shadow-[0_0_14px_rgba(239,68,68,0.4)]"
+            :class="{ 'animate-pulse ring-1 ring-red-400': turnCountdown <= 10 }"
+            title="本手思考时间上限30秒"
           >
             <span>⏱️</span>
-            <span class="tabular-nums">{{ (turnSeat === mySeat && !isAutoHost) ? `${turnCountdown}s` : '--' }}</span>
+            <span class="tabular-nums font-black text-red-400 tracking-tight">{{ winnerSeat === null ? `${turnCountdown}s` : '--' }}</span>
           </div>
 
           <!-- 2. 过牌按钮 (长驻显示) -->
@@ -1074,23 +1072,29 @@ function stopTurnCountdown() {
 function startTurnCountdown() {
   stopTurnCountdown();
   resetRemoteWatchdog();
-  if (turnSeat.value === mySeat.value && winnerSeat.value === null && !isAutoHost.value) {
+  if (winnerSeat.value === null) {
     turnCountdown.value = 30;
     countdownInterval = setInterval(() => {
-      if (turnSeat.value !== mySeat.value || winnerSeat.value !== null || isAutoHost.value) {
+      if (winnerSeat.value !== null) {
         stopTurnCountdown();
         return;
       }
       turnCountdown.value--;
       if (turnCountdown.value <= 0) {
-        stopTurnCountdown();
-        isAutoHost.value = true;
-        errorTip.value = '思考超时，已自动开启托管！';
-        if (typeof soundFX.speakVoice === 'function') {
-          soundFX.speakVoice('思考超时，自动开启托管');
+        if (countdownInterval) {
+          clearInterval(countdownInterval);
+          countdownInterval = null;
         }
-        emitStatus();
-        checkAutoHostTurn();
+        turnCountdown.value = 0;
+        if (turnSeat.value === mySeat.value && !isAutoHost.value) {
+          isAutoHost.value = true;
+          errorTip.value = '思考超时，已自动开启托管！';
+          if (typeof soundFX.speakVoice === 'function') {
+            soundFX.speakVoice('思考超时，自动开启托管');
+          }
+          emitStatus();
+          checkAutoHostTurn();
+        }
       }
     }, 1000);
   }
