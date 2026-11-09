@@ -89,13 +89,8 @@ export const SERVER_PRESETS: ServerPreset[] = getServerPresets();
 export function isNativeApkEnvironment(): boolean {
   if (typeof window === 'undefined') return false;
   const isCapacitor = Boolean((window as any).Capacitor?.isNativePlatform?.());
-  return (
-    isCapacitor ||
-    window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1' ||
-    window.location.protocol === 'file:' ||
-    window.location.protocol === 'capacitor:'
-  );
+  const isFileOrCapProtocol = window.location.protocol === 'file:' || window.location.protocol === 'capacitor:';
+  return isCapacitor || isFileOrCapProtocol;
 }
 
 export function getRemoteServerUrl(): string {
