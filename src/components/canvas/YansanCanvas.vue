@@ -881,19 +881,41 @@ function handleSurrender(seat: number = mySeat.value, isRemote = false) {
   drawTable();
 
   if (!isRemote && !props.isPracticeMode && props.ws && props.ws.readyState === WebSocket.OPEN) {
-    props.ws.send(JSON.stringify({
-      type: 'game_move',
-      roomId: props.roomId,
-      event: { action: 'surrender', seat }
-    }));
+    try {
+      props.ws.send(JSON.stringify({
+        type: 'game_move',
+        roomId: props.roomId,
+        seat: mySeat.value,
+        payload: {
+          action: 'surrender',
+          seat: mySeat.value,
+          winner: res.winnerSeat,
+          firstWinner: res.winnerSeat,
+          finishedSeats: [...finishedSeats],
+          allianceScoreResult: allianceScoreResult.value,
+        },
+        event: {
+          action: 'surrender',
+          seat: mySeat.value,
+          winner: res.winnerSeat,
+          firstWinner: res.winnerSeat,
+          finishedSeats: [...finishedSeats],
+          allianceScoreResult: allianceScoreResult.value,
+        }
+      }));
+    } catch {}
   }
 
   emit('move', {
+    action: 'surrender',
     winner: res.winnerSeat,
+    firstWinner: res.winnerSeat,
     pointsDelta: myDelta,
     detailText: res.summary,
     finishedSeats: [...finishedSeats],
     allianceScoreResult: allianceScoreResult.value,
+    isRemote,
+    skipWs: true,
     seat: mySeat.value,
   });
 }
@@ -1542,6 +1564,51 @@ function handleReconnectSync(msg: any) {
   const deal = msg.deal;
   if (deal?.dealId) lastAppliedDealId.value = deal.dealId;
 
+  if (bs?.finishedSeats && Array.isArray(bs.finishedSeats)) {
+    finishedSeats.splice(0, finishedSeats.length, ...bs.finishedSeats);
+  }
+  if (bs?.handsCount && Array.isArray(bs.handsCount)) {
+    for (let s = 0; s < 4; s++) {
+      if (s !== mySeat.value && typeof bs.handsCount[s] === 'number') {
+        const targetLen = bs.handsCount[s];
+        if (hands[s] && hands[s].length > targetLen) {
+          hands[s] = hands[s].slice(0, targetLen);
+        }
+      }
+    }
+  }
+
+  // 若服务端已产生权威结算或终局状态，直接恢复权威对决结果
+  const authRes = bs?.allianceScoreResult || bs?.settlement;
+  if (authRes && Array.isArray(authRes.seatScores) && (bs.phase === 'ended' || (bs.winnerSeat !== null && bs.winnerSeat !== undefined))) {
+    winnerSeat.value = bs.winnerSeat ?? (authRes.isTie ? -1 : (finishedSeats[0] ?? 0));
+    hasClickedReady.value = false;
+    allianceScoreResult.value = {
+      winnerAlliance: authRes.winnerAlliance,
+      score: Math.abs(authRes.seatScores[mySeat.value] ?? 0),
+      summary: authRes.summary,
+      seatScores: [...authRes.seatScores],
+      isTie: Boolean(authRes.isTie),
+    };
+    drawTable();
+    emitStatus();
+
+    const myDelta = authRes.seatScores[mySeat.value] ?? 0;
+    emit('move', {
+      action: 'finish',
+      winner: winnerSeat.value,
+      firstWinner: finishedSeats[0] ?? winnerSeat.value,
+      pointsDelta: myDelta,
+      detailText: authRes.summary,
+      finishedSeats: [...finishedSeats],
+      allianceScoreResult: allianceScoreResult.value,
+      isRemote: true,
+      skipWs: true,
+      seat: mySeat.value,
+    });
+    return;
+  }
+
   if (bs?.lastCombo !== undefined) {
     lastCombo.value = bs.lastCombo;
   }
@@ -1802,6 +1869,11 @@ function getNextActiveSeat(fromSeat: number): number {
 }
 
 function checkGameFinishAfterPlay(seat: number, isRemote: boolean = false) {
+  // 防重保护：若本局已被权威结算或已触发终局结算，绝对不可二次重复计算并覆盖同盟成绩
+  if (winnerSeat.value !== null && allianceScoreResult.value !== null) {
+    return;
+  }
+
   if (!finishedSeats.includes(seat)) {
     finishedSeats.push(seat);
   }
@@ -1858,7 +1930,7 @@ function checkGameFinishAfterPlay(seat: number, isRemote: boolean = false) {
       winnerAlliance: result.winnerAlliance,
       score: Math.abs(result.seatScores[mySeat.value] || 0),
       summary: result.summary,
-      seatScores: result.seatScores,
+      seatScores: [...result.seatScores],
       isTie: result.isTie,
     };
 
@@ -1874,14 +1946,55 @@ function checkGameFinishAfterPlay(seat: number, isRemote: boolean = false) {
       soundFX.speakVoice?.('双方势均力敌，本局打和！');
     }
 
+    const authWinnerSeat = result.isTie ? -1 : firstWinner;
+
+    // 真人多人联机场景：由触发终局的客户端立即向全场广播权威结算数据包 (包含所有人精确席位得分与出清顺序)
+    if (!props.isPracticeMode && !isRemote && props.ws && props.ws.readyState === WebSocket.OPEN) {
+      try {
+        props.ws.send(JSON.stringify({
+          type: 'game_move',
+          roomId: props.roomId,
+          seat: mySeat.value,
+          payload: {
+            action: 'finish',
+            winner: authWinnerSeat,
+            firstWinner: firstWinner,
+            finishedSeats: [...finishedSeats],
+            allianceScoreResult: {
+              winnerAlliance: result.winnerAlliance,
+              summary: result.summary,
+              seatScores: [...result.seatScores],
+              isTie: result.isTie,
+            },
+            seat: mySeat.value,
+          },
+          event: {
+            action: 'finish',
+            winner: authWinnerSeat,
+            firstWinner: firstWinner,
+            finishedSeats: [...finishedSeats],
+            allianceScoreResult: {
+              winnerAlliance: result.winnerAlliance,
+              summary: result.summary,
+              seatScores: [...result.seatScores],
+              isTie: result.isTie,
+            },
+            seat: mySeat.value,
+          }
+        }));
+      } catch {}
+    }
+
     emit('move', {
-      winner: myDelta > 0 ? 0 : (myDelta < 0 ? firstWinner : -1),
+      action: 'finish',
+      winner: authWinnerSeat,
+      firstWinner: firstWinner,
       pointsDelta: myDelta,
       detailText: result.summary,
       finishedSeats: [...finishedSeats],
       allianceScoreResult: allianceScoreResult.value,
       isRemote,
-      skipWs: isRemote,
+      skipWs: true,
       seat: mySeat.value,
     });
   }
@@ -3110,53 +3223,105 @@ function handlePass() {
 function handleRemoteGameEvent(evt: any) {
   if (!evt) return;
 
-  if (evt.winner !== undefined && evt.winner !== null && winnerSeat.value === null) {
-    const winSeat = Number(evt.winner);
-    winnerSeat.value = winSeat;
-    if (!finishedSeats.includes(winSeat)) {
-      finishedSeats.push(winSeat);
+  const incomingAuthRes = evt.allianceScoreResult || evt.payload?.allianceScoreResult;
+  const isFinishAction = evt.action === 'finish' || (evt.winner !== undefined && evt.winner !== null);
+
+  if (isFinishAction) {
+    if (Array.isArray(evt.finishedSeats) && evt.finishedSeats.length > 0) {
+      finishedSeats.splice(0, finishedSeats.length, ...evt.finishedSeats);
     }
-    if (Array.isArray(evt.finishedSeats)) {
-      for (const s of evt.finishedSeats) {
-        if (!finishedSeats.includes(s)) finishedSeats.push(s);
+
+    if (incomingAuthRes && Array.isArray(incomingAuthRes.seatScores)) {
+      // 权威结算数据包直通同步：所有4家客户端绝对采用同一份席位得分与同盟结算结果，杜绝网络丢包导致结算分歧
+      const authRes = incomingAuthRes;
+      const winSeat = evt.winner !== undefined && evt.winner !== null
+        ? Number(evt.winner)
+        : (authRes.isTie ? -1 : (finishedSeats[0] ?? 0));
+      winnerSeat.value = winSeat;
+      hasClickedReady.value = false;
+      allianceScoreResult.value = {
+        winnerAlliance: authRes.winnerAlliance,
+        score: Math.abs(authRes.seatScores[mySeat.value] ?? 0),
+        summary: authRes.summary,
+        seatScores: [...authRes.seatScores],
+        isTie: Boolean(authRes.isTie),
+      };
+      drawTable();
+      emitStatus();
+
+      const myDelta = authRes.seatScores[mySeat.value] ?? 0;
+      if (myDelta > 0) {
+        if (typeof soundFX.playVictory === 'function') soundFX.playVictory();
+      } else if (myDelta < 0) {
+        if (typeof soundFX.playDefeat === 'function') soundFX.playDefeat();
+      } else {
+        soundFX.playTap?.();
+        soundFX.speakVoice?.('双方势均力敌，本局打和！');
       }
-    }
-    const res = calculateYansanSettlement(
-      selectedRoom.value || '5-10',
-      winSeat,
-      isQiangGongActive.value,
-      qiangGongSeat.value,
-      spade3Seat.value,
-      spadeASeat.value,
-      [...finishedSeats]
-    );
-    allianceScoreResult.value = {
-      winnerAlliance: res.winnerAlliance,
-      score: Math.abs(res.seatScores[mySeat.value] || 0),
-      summary: res.summary,
-      seatScores: res.seatScores,
-      isTie: res.isTie,
-    };
-    drawTable();
-    emitStatus();
 
-    const myDelta = res.seatScores[mySeat.value] || 0;
-    if (myDelta > 0) {
-      if (typeof soundFX.playVictory === 'function') soundFX.playVictory();
-    } else if (myDelta < 0) {
-      if (typeof soundFX.playDefeat === 'function') soundFX.playDefeat();
-    }
+      emit('move', {
+        action: 'finish',
+        winner: winSeat,
+        firstWinner: finishedSeats[0] ?? winSeat,
+        pointsDelta: myDelta,
+        detailText: authRes.summary,
+        finishedSeats: [...finishedSeats],
+        allianceScoreResult: allianceScoreResult.value,
+        isRemote: true,
+        skipWs: true,
+        seat: mySeat.value,
+      });
+      return;
+    } else if (winnerSeat.value === null) {
+      const winSeat = Number(evt.winner);
+      winnerSeat.value = winSeat;
+      if (winSeat >= 0 && !finishedSeats.includes(winSeat)) {
+        finishedSeats.push(winSeat);
+      }
+      const res = calculateYansanSettlement(
+        selectedRoom.value || '5-10',
+        winSeat >= 0 ? winSeat : (finishedSeats[0] ?? 0),
+        isQiangGongActive.value,
+        qiangGongSeat.value,
+        spade3Seat.value,
+        spadeASeat.value,
+        [...finishedSeats]
+      );
+      hasClickedReady.value = false;
+      allianceScoreResult.value = {
+        winnerAlliance: res.winnerAlliance,
+        score: Math.abs(res.seatScores[mySeat.value] || 0),
+        summary: res.summary,
+        seatScores: [...res.seatScores],
+        isTie: res.isTie,
+      };
+      drawTable();
+      emitStatus();
 
-    emit('move', {
-      winner: winSeat,
-      pointsDelta: myDelta,
-      detailText: res.summary,
-      finishedSeats: [...finishedSeats],
-      allianceScoreResult: allianceScoreResult.value,
-      isRemote: true,
-      skipWs: true,
-      seat: mySeat.value,
-    });
+      const myDelta = res.seatScores[mySeat.value] || 0;
+      if (myDelta > 0) {
+        if (typeof soundFX.playVictory === 'function') soundFX.playVictory();
+      } else if (myDelta < 0) {
+        if (typeof soundFX.playDefeat === 'function') soundFX.playDefeat();
+      } else {
+        soundFX.playTap?.();
+        soundFX.speakVoice?.('双方势均力敌，本局打和！');
+      }
+
+      emit('move', {
+        action: 'finish',
+        winner: winSeat,
+        firstWinner: finishedSeats[0] ?? winSeat,
+        pointsDelta: myDelta,
+        detailText: res.summary,
+        finishedSeats: [...finishedSeats],
+        allianceScoreResult: allianceScoreResult.value,
+        isRemote: true,
+        skipWs: true,
+        seat: mySeat.value,
+      });
+      return;
+    }
   }
 
   if (evt.seat === mySeat.value) return;

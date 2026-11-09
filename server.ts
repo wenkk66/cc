@@ -1516,6 +1516,12 @@ wss.on('connection', (ws) => {
           if (room.gameType === 'yansan') {
             if (!bs.extraState) bs.extraState = {};
             if (!bs.extraState.playedCardsHistory) bs.extraState.playedCardsHistory = [];
+            if (!bs.finishedSeats) bs.finishedSeats = [];
+            if (p.finishedSeats && Array.isArray(p.finishedSeats)) {
+              bs.finishedSeats = [...p.finishedSeats];
+            } else if (bs.handsCount && bs.handsCount[seat] === 0 && !bs.finishedSeats.includes(seat)) {
+              bs.finishedSeats.push(seat);
+            }
             if (action === 'play') {
               if (combo?.cards) {
                 bs.extraState.playedCardsHistory.push(...combo.cards);
@@ -1586,9 +1592,16 @@ wss.on('connection', (ws) => {
             return;
           }
 
-          if (p.winner !== undefined && p.winner !== null) {
-            bs.winnerSeat = Number(p.winner);
+          if (p.action === 'finish' || (p.winner !== undefined && p.winner !== null)) {
+            bs.winnerSeat = p.winner !== undefined && p.winner !== null ? Number(p.winner) : null;
             bs.phase = 'ended';
+            if (p.finishedSeats && Array.isArray(p.finishedSeats)) {
+              bs.finishedSeats = [...p.finishedSeats];
+            }
+            if (p.allianceScoreResult) {
+              bs.allianceScoreResult = p.allianceScoreResult;
+              bs.settlement = p.allianceScoreResult;
+            }
 
             const targetSceneRoom = sceneWaitingRooms.get(room.id);
             if (targetSceneRoom) {
@@ -1629,7 +1642,9 @@ wss.on('connection', (ws) => {
               seat,
               combo,
               nextTurn: p.nextTurn,
-              winner: p.winner,
+              winner: bs.winnerSeat ?? p.winner,
+              finishedSeats: bs.finishedSeats || p.finishedSeats,
+              allianceScoreResult: bs.allianceScoreResult || p.allianceScoreResult,
               ...p,
             },
             payload: {
@@ -1637,7 +1652,9 @@ wss.on('connection', (ws) => {
               seat,
               combo,
               nextTurn: p.nextTurn,
-              winner: p.winner,
+              winner: bs.winnerSeat ?? p.winner,
+              finishedSeats: bs.finishedSeats || p.finishedSeats,
+              allianceScoreResult: bs.allianceScoreResult || p.allianceScoreResult,
               ...p,
             },
             moveCount: room.moveCount,

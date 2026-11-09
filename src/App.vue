@@ -3485,7 +3485,7 @@ function onGameMove(payload: any) {
 
   // Handle outcome
   if (payload && payload.winner !== undefined && payload.winner !== null) {
-    const roundKey = `${activeGameType.value}_${currentRoomIdVal || 'local'}_${payload.winner}_${payload.rewardCoins ?? ''}_${payload.payoutPerOpponent ?? ''}`;
+    const roundKey = `${activeGameType.value}_${currentRoomIdVal || 'local'}_${payload.finishedSeats?.join('-') || payload.winner}_${payload.allianceScoreResult?.summary || payload.rewardCoins || ''}`;
     const now = Date.now();
     if (lastSettledMatchKey === roundKey && now - lastSettledMatchTime < 3500) {
       console.warn('🛡️ [全局对局结算防重] 3.5秒内已处理过本局结算，防止重复结算与多次扣减积分');

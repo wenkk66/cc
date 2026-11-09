@@ -33,6 +33,9 @@ export interface AuthoritativeBoardState {
   winnerSeat?: number | null;
   wallRemaining?: number;
   discardsHistory?: ServerComboDTO[];
+  finishedSeats?: number[];
+  allianceScoreResult?: any;
+  settlement?: any;
   extraState?: Record<string, any>;
   updatedAt: number;
 }

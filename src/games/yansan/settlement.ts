@@ -7,8 +7,8 @@ import { calculateYansanSettlement as calculateYansanEngineSettlement } from './
 export { calculateYansanEngineSettlement };
 
 export function resolveYansanMoveSettlement(payload: YansanMovePayload): YansanSettlementResult {
-  const isTie = payload.winner === -1 || (typeof payload.pointsDelta === 'number' && payload.pointsDelta === 0);
-  const isWin = typeof payload.pointsDelta === 'number' ? payload.pointsDelta > 0 : payload.winner === 0;
+  const isTie = payload.winner === -1 || (typeof payload.pointsDelta === 'number' && payload.pointsDelta === 0) || Boolean(payload.allianceScoreResult?.isTie);
+  const isWin = typeof payload.pointsDelta === 'number' ? payload.pointsDelta > 0 : (payload.winner === 0 && !isTie);
 
   let scorePoints = 0;
   let coinsDelta = 0;

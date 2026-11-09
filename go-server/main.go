@@ -75,9 +75,12 @@ type AuthoritativeBoardState struct {
 	Multiplier   int             `json:"multiplier"`
 	HandsCount   []int           `json:"handsCount"`
 	LastCombo    json.RawMessage `json:"lastCombo,omitempty"`
-	LandlordSeat *int            `json:"landlordSeat,omitempty"`
-	WinnerSeat   *int            `json:"winnerSeat,omitempty"`
-	UpdatedAt    int64           `json:"updatedAt"`
+	LandlordSeat        *int            `json:"landlordSeat,omitempty"`
+	WinnerSeat          *int            `json:"winnerSeat,omitempty"`
+	FinishedSeats       []int           `json:"finishedSeats,omitempty"`
+	Settlement          interface{}     `json:"settlement,omitempty"`
+	AllianceScoreResult interface{}     `json:"allianceScoreResult,omitempty"`
+	UpdatedAt           int64           `json:"updatedAt"`
 }
 
 type RoomState struct {
@@ -570,20 +573,32 @@ func (h *Hub) handleMessage(client *WSConn, raw []byte) {
 			h.mu.Unlock()
 		}
 
-	case "room_reconnect":
+	case "room_reconnect", "scene_reconnect":
 		roomID, _ := msg["roomId"].(string)
 		h.mu.RLock()
 		if room, ok := h.rooms[roomID]; ok {
 			roomCopy := *room
 			h.mu.RUnlock()
+			ackType := "reconnect_ack"
+			if mType, _ := msg["type"].(string); mType == "scene_reconnect" {
+				ackType = "scene_reconnect_ack"
+			}
 			_ = client.WriteJSON(map[string]interface{}{
-				"type":       "reconnect_ack",
+				"type":       ackType,
 				"room":       roomCopy,
 				"boardState": roomCopy.BoardState,
+				"players":    roomCopy.Players,
 				"serverTs":   now,
 			})
 		} else {
 			h.mu.RUnlock()
+			if mType, _ := msg["type"].(string); mType == "scene_reconnect" {
+				_ = client.WriteJSON(map[string]interface{}{
+					"type":   "scene_reconnect_ack",
+					"failed": true,
+					"reason": "room_not_found",
+				})
+			}
 		}
 
 	case "game_chat":
@@ -650,6 +665,22 @@ func (h *Hub) handleMessage(client *WSConn, raw []byte) {
 						room.BoardState.WinnerSeat = &wVal
 						room.BoardState.Phase = "ended"
 					}
+					if act, ok := payload["action"].(string); ok && act == "finish" {
+						room.BoardState.Phase = "ended"
+					}
+					if fSeats, ok := payload["finishedSeats"].([]interface{}); ok {
+						seats := make([]int, 0, len(fSeats))
+						for _, fs := range fSeats {
+							if n, ok := fs.(float64); ok {
+								seats = append(seats, int(n))
+							}
+						}
+						room.BoardState.FinishedSeats = seats
+					}
+					if allRes, ok := payload["allianceScoreResult"]; ok {
+						room.BoardState.AllianceScoreResult = allRes
+						room.BoardState.Settlement = allRes
+					}
 					if cardsPlayed, ok := payload["cardsCount"].(float64); ok {
 						if seat >= 0 && seat < len(room.BoardState.HandsCount) {
 							rem := room.BoardState.HandsCount[seat] - int(cardsPlayed)
@@ -657,6 +688,18 @@ func (h *Hub) handleMessage(client *WSConn, raw []byte) {
 								rem = 0
 							}
 							room.BoardState.HandsCount[seat] = rem
+							if rem == 0 {
+								found := false
+								for _, fs := range room.BoardState.FinishedSeats {
+									if fs == seat {
+										found = true
+										break
+									}
+								}
+								if !found {
+									room.BoardState.FinishedSeats = append(room.BoardState.FinishedSeats, seat)
+								}
+							}
 						}
 					}
 				}

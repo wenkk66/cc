@@ -44,6 +44,8 @@ export interface YansanAllianceScoreResult {
   winnerAlliance?: string;
   summary?: string;
   scores?: Record<number, number>;
+  seatScores?: number[];
+  isTie?: boolean;
   detailText?: string;
 }
 
